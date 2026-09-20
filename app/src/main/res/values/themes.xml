@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Activity 启动时使用的系统主题。
+      继承 Material 的无 ActionBar 主题，具体界面颜色由 Compose 里的 MaterialTheme 负责。
+
+      windowBackground 设成启动页的深蓝色：Activity 创建到 Compose 画出第一帧之间有一小段空隙，
+      这段时间显示的是窗口背景。用它顶替系统默认的白底，启动时就不会闪一下白屏。
+    -->
+    <style name="Theme.MusicPractice" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
+</resources>

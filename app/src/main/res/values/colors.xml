@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      应用图标里深蓝背景的代表色。
+      自适应图标（Android 8.0+）把它当作背景层，前景图透明的地方会露出这个颜色。
+    -->
+    <color name="ic_launcher_background">#122765</color>
+
+    <!--
+      启动页底色：取自应用图标同一套深蓝。
+      它同时被设成 Activity 的窗口背景，这样冷启动的第一帧就是这个颜色，不会先闪一下白屏。
+    -->
+    <color name="splash_background">#0C1E56</color>
+</resources>

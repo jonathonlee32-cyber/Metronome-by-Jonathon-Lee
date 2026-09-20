@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">节拍器</string>
+
+    <!-- 启动页上的四行文字（居中显示）。 -->
+    <string name="splash_title">节拍器</string>
+    <string name="splash_author">by Jonathon Lee</string>
+    <string name="splash_belonging">XMU 22920262203493</string>
+    <!--
+      版本号和日期之间是两个空格。XML 里连续空格会被资源编译器压成一个，
+      所以这里用 \u0020 转义保住第二个空格。
+    -->
+    <string name="splash_version">v_1.4\u0020\u00202026.09.20</string>
+</resources>
