@@ -11,6 +11,15 @@
 - 无广告，不盈利
 - 支持记录练习时间
 
+## Screenshots
+
+### Splash
+
+<img src="/screenshots/Screenshot_2026-09-20-21-15-35-846_com.example.m.jpg" width="250">
+
+### Main
+
+<img src="/screenshots/Screenshot_2026-09-20-21-15-41-861_com.example.m.jpg" width="250">
 ## Tech Stack
 
 - Kotlin
