@@ -15,13 +15,13 @@
 
 ### Splash
 
-<img src="/screenshots/Screenshot\_2026-09-21-15-00-57-456\_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-21-15-00-57-456_com.example.m.jpg" width="250">
 
 ### Main
 
-<img src="/screenshots/Screenshot\_2026-09-21-15-01-01-766\_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-21-15-01-01-766_com.example.m.jpg" width="250">
 
-<img src="/screenshots/Screenshot\_2026-09-21-15-01-04-736\_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-21-15-01-04-736_com.example.m.jpg" width="250">
 
 ### Records
 
