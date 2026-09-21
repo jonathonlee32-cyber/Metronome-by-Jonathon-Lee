@@ -18,8 +18,9 @@ android {
         // 支持 Android 5.0 及以上，覆盖面最广。
         minSdk = 21
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.1"
+        // 版本号规则：每次改动功能 +1（v2.2 -> v2.2.1），versionName 与启动页显示的版本一致。
+        versionCode = 12
+        versionName = "3.2"
     }
 
     buildTypes {
@@ -41,6 +42,13 @@ android {
     buildFeatures {
         // 开启 Compose 支持。
         compose = true
+    }
+
+    testOptions {
+        // 纯 JVM 单元测试里没有 Android 的 Log 实现。returnDefaultValues 让 android.util.Log
+        // 这类只有签名的方法返回默认值（Log.w 变成空操作），这样"配置文件被改坏时回落到默认值"
+        // 这种会走到日志分支的路径也能被测到。只影响单元测试，不影响 App 行为。
+        unitTests.isReturnDefaultValues = true
     }
 }
 
