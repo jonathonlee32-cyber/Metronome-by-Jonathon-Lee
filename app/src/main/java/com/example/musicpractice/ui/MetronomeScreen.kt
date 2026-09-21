@@ -7,13 +7,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -49,6 +58,9 @@ private const val LONG_PRESS_REPEAT_MILLIS = 50L
  * 这是一个"无状态"的 Composable：它自己不保存任何业务数据，只是把传进来的 [state] 画出来，
  * 用户点击时调用传进来的回调。这样界面和逻辑分开，逻辑改起来不影响界面，
  * 也方便用 @Preview 直接预览。
+ *
+ * 右上角是"练习记录"入口。它用 Box 叠在原有内容之上，所以中间那套
+ * BPM / 音量 / 计时 / 播放按钮的位置一点没动。
  */
 @Composable
 fun MetronomeScreen(
@@ -58,80 +70,103 @@ fun MetronomeScreen(
     onVolumeChange: (Float) -> Unit,
     onResetTimer: () -> Unit,
     onTogglePlay: () -> Unit,
+    onOpenRecords: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 整个界面不再统一加左右内边距：因为音量滑块要求从屏幕左端一直延伸到右端。
-    // 需要留白的地方（数字、按钮、计时那一行）各自加 padding。
-    Column(
-        modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(text = "BPM", style = MaterialTheme.typography.titleMedium)
-
-        // 当前 BPM。state.bpm 变化时，Compose 会自动重新执行这里，把数字刷新出来。
-        Text(text = state.bpm.toString(), style = MaterialTheme.typography.displayLarge)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-            StepButton(
-                symbol = "-",
-                enabled = state.bpm > MetronomeEngine.MIN_BPM,
-                onStep = onDecreaseBpm
-            )
-            StepButton(
-                symbol = "+",
-                enabled = state.bpm < MetronomeEngine.MAX_BPM,
-                onStep = onIncreaseBpm
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 音量滑块：0.0 在最左端（静音），1.0 在最右端（最大音量）。
-        // Slider 是 Material 3 自带的组件，拖动时 onValueChange 会连续回调。
-        Slider(
-            value = state.volume,
-            onValueChange = onVolumeChange,
-            valueRange = 0f..1f,
-            // 左右各留 32dp：这样不用把手指拖到屏幕最边缘也能滑到 0（静音）和 1（最大音量）。
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 计时那一行：左边显示时间，右边是清零按钮。
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier.fillMaxSize()) {
+        // 整个界面不再统一加左右内边距：因为音量滑块要求从屏幕左端一直延伸到右端。
+        // 需要留白的地方（数字、按钮、计时那一行）各自加 padding。
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = formatElapsed(state.elapsedMillis),
-                style = MaterialTheme.typography.headlineSmall,
-                // 等宽字体：数字宽度一致，秒数跳动时文字不会左右抖动。
-                fontFamily = FontFamily.Monospace
+            Text(text = "BPM", style = MaterialTheme.typography.titleMedium)
+
+            // 当前 BPM。state.bpm 变化时，Compose 会自动重新执行这里，把数字刷新出来。
+            Text(text = state.bpm.toString(), style = MaterialTheme.typography.displayLarge)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+                StepButton(
+                    symbol = "-",
+                    enabled = state.bpm > MetronomeEngine.MIN_BPM,
+                    onStep = onDecreaseBpm
+                )
+                StepButton(
+                    symbol = "+",
+                    enabled = state.bpm < MetronomeEngine.MAX_BPM,
+                    onStep = onIncreaseBpm
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 音量滑块：0.0 在最左端（静音），1.0 在最右端（最大音量）。
+            // Slider 是 Material 3 自带的组件，拖动时 onValueChange 会连续回调。
+            Slider(
+                value = state.volume,
+                onValueChange = onVolumeChange,
+                valueRange = 0f..1f,
+                // 左右各留 32dp：这样不用把手指拖到屏幕最边缘也能滑到 0（静音）和 1（最大音量）。
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             )
-            TextButton(onClick = onResetTimer) {
-                Text(text = "清零")
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 计时那一行：左边显示时间，右边是清零按钮。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatElapsed(state.elapsedMillis),
+                    style = MaterialTheme.typography.headlineSmall,
+                    // 等宽字体：数字宽度一致，秒数跳动时文字不会左右抖动。
+                    fontFamily = FontFamily.Monospace
+                )
+                TextButton(onClick = onResetTimer) {
+                    Text(text = "清零")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onTogglePlay,
+                modifier = Modifier.size(width = 160.dp, height = 56.dp)
+            ) {
+                Text(
+                    text = if (state.isPlaying) "暂停" else "开始",
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onTogglePlay,
-            modifier = Modifier.size(width = 160.dp, height = 56.dp)
+        // "练习记录"入口：贴在右上角，不占中间那套控件的位置。
+        // 用带底色的按钮而不是纯文字，是为了容易发现（需求要求"容易发现"）。
+        // 加 statusBars 内边距：targetSdk 35 起 Android 15 会强制全屏布局，
+        // 不加的话这个按钮会被状态栏压住。
+        FilledTonalButton(
+            onClick = onOpenRecords,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(16.dp)
         ) {
-            Text(
-                text = if (state.isPlaying) "暂停" else "开始",
-                style = MaterialTheme.typography.titleMedium
+            Icon(
+                imageVector = Icons.Filled.DateRange,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.IconSize)
             )
+            Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+            Text(text = "练习记录", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -238,7 +273,8 @@ private fun MetronomeScreenPreview() {
             onIncreaseBpm = {},
             onVolumeChange = {},
             onResetTimer = {},
-            onTogglePlay = {}
+            onTogglePlay = {},
+            onOpenRecords = {}
         )
     }
 }

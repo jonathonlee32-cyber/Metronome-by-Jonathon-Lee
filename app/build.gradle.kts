@@ -18,8 +18,8 @@ android {
         // 支持 Android 5.0 及以上，覆盖面最广。
         minSdk = 21
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "2.0"
     }
 
     buildTypes {
@@ -55,4 +55,9 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+
+    // 纯 JVM 单元测试：练习记录的日期切分、时长格式化和统计汇总都是纯逻辑，直接跑在电脑上。
+    testImplementation(libs.junit)
+    // org.json 是 Android 自带的类，JVM 测试里没有实现，这里补一个真实实现用于跑序列化测试。
+    testImplementation(libs.json)
 }

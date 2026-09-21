@@ -1,12 +1,14 @@
 package com.example.musicpractice.ui
 
+import android.app.Application
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicpractice.metronome.MetronomeEngine
+import com.example.musicpractice.practice.PracticeTimeManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,14 +39,30 @@ data class MetronomeUiState(
  * 状态用 Compose 的 mutableStateOf 保存：它被 @Composable 读取时，值一变就会自动重组。
  * 注意 ViewModel 的生命周期比 Activity 长：屏幕旋转时 Activity 会重建，但 ViewModel 不会，
  * 所以正在播放的节拍不会因为旋转屏幕而中断（这也是不把引擎直接写在 @Composable 里的原因）。
+ *
+ * 除了节拍本身，它还负责"每日时间记录"：开始播放时开一段练习、停止时结算并存盘。
+ * 存储细节交给 [PracticeTimeManager]，这里只做衔接，节拍器的操作逻辑一行没改。
  */
-class MetronomeViewModel : ViewModel() {
+class MetronomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val engine = MetronomeEngine()
+
+    /** 练习记录的读写与计时。构造时会自动结算上一次没来得及收尾的练习。 */
+    private val practiceTime = PracticeTimeManager(application)
 
     /** 当前界面状态。private set 表示只有 ViewModel 自己能改，界面只能读。 */
     var uiState by mutableStateOf(MetronomeUiState())
         private set
+
+    /** "每日时间记录"页面要显示的全部内容。 */
+    var recordsState by mutableStateOf(PracticeRecordsUiState())
+        private set
+
+    init {
+        // 启动时先算一次：如果上次是被强杀的，管理器已经把那段练习结算好了，
+        // 这里顺手把记录页的数据准备好。
+        refreshRecords()
+    }
 
     // ---------------- 秒表相关 ----------------
     //
@@ -82,16 +100,48 @@ class MetronomeViewModel : ViewModel() {
             accumulatedMillis = elapsedNow()
             stopTicker()
             engine.stop()
+            // 节拍停下 → 这一段练习结束，落盘存档。用挂钟时间（当前时刻）而不是秒表读数，
+            // 因为记录要写进"某天某时"，必须能和日历对上。
+            practiceTime.endSession(System.currentTimeMillis())
+            refreshRecords()
             // 暂停不清零：把累计到的时间留在界面上。
             uiState = uiState.copy(isPlaying = false, elapsedMillis = accumulatedMillis)
         } else {
             engine.start()
             // 从"现在"开始新的一段，接着之前累计的时间继续走。
             segmentStartedAtMillis = SystemClock.elapsedRealtime()
+            // 节拍响起 → 开一段新的练习记录并立刻落盘，
+            // 这样即使下一秒进程被杀，也知道这次练习是从什么时候开始的。
+            practiceTime.beginSession(System.currentTimeMillis())
+            refreshRecords()
             // 先让 isPlaying 变成 true，再启动刷新协程，这样它算出来的时间才是"正在计时"。
             uiState = uiState.copy(isPlaying = true)
             startTicker()
         }
+    }
+
+    /**
+     * 请记录页重新算一遍数据。进入记录页时、每秒刷新时由界面调用。
+     * 顺便把"到这一刻还在练习"写进文件（心跳），强杀时能少损失几秒。
+     */
+    fun refreshRecords() {
+        val now = System.currentTimeMillis()
+        practiceTime.touchSession(now)
+        recordsState = buildPracticeRecordsUiState(
+            sessions = practiceTime.sessions(),
+            activeStartMillis = practiceTime.activeSession()?.startMillis,
+            nowMillis = now
+        )
+    }
+
+    /**
+     * App 退到后台时立刻记一次心跳。
+     *
+     * 后台里定时器可能被系统冻结，光靠 5 秒一次的心跳就不够准了；
+     * 在"还能确定这一刻还在练习"的时候落一次盘，最坏情况下也只是少记几秒。
+     */
+    fun recordHeartbeat() {
+        practiceTime.touchSession(System.currentTimeMillis(), force = true)
     }
 
     /** 清零：时间回到 00:00:00。正在计时的话就从此刻重新开始累计。 */
@@ -121,6 +171,8 @@ class MetronomeViewModel : ViewModel() {
         ticker = viewModelScope.launch {
             while (true) {
                 uiState = uiState.copy(elapsedMillis = elapsedNow())
+                // 每 200 毫秒调用一次，但存储层会按 5 秒节流，真正的写盘次数很少。
+                practiceTime.touchSession(System.currentTimeMillis())
                 delay(DISPLAY_REFRESH_MILLIS)
             }
         }
@@ -143,6 +195,11 @@ class MetronomeViewModel : ViewModel() {
         // ViewModel 即将销毁（例如用户退出界面），确保停掉音频、释放 AudioTrack。
         stopTicker()
         engine.stop()
+        // 用户按返回键退出时 onCleared 会被调用，但这时音频已经停了，练习实际到此为止，
+        // 所以把还没结束的那一段结算掉（按"现在"收尾，而不是等下次打开时按心跳收尾）。
+        if (practiceTime.hasActiveSession()) {
+            practiceTime.endSession(System.currentTimeMillis())
+        }
     }
 
     private companion object {
