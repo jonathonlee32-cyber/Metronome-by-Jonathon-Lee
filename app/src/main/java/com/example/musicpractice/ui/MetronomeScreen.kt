@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,9 +19,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,8 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.musicpractice.metronome.MetronomeEngine
@@ -59,8 +63,9 @@ private const val LONG_PRESS_REPEAT_MILLIS = 50L
  * 用户点击时调用传进来的回调。这样界面和逻辑分开，逻辑改起来不影响界面，
  * 也方便用 @Preview 直接预览。
  *
- * 右上角是"练习记录"入口。它用 Box 叠在原有内容之上，所以中间那套
- * BPM / 音量 / 计时 / 播放按钮的位置一点没动。
+ * 顶部一排是三个入口：左"BPM 测速"、中"调音器"、右"练习记录"。
+ * 它们用 Box 叠在原有内容之上，所以中间那套 BPM / 音量 / 计时 / 播放按钮的位置一点没动。
+ * 三个按钮等分整行宽度、同一个图标尺寸和文字样式，看起来就是一组入口。
  */
 @Composable
 fun MetronomeScreen(
@@ -70,6 +75,8 @@ fun MetronomeScreen(
     onVolumeChange: (Float) -> Unit,
     onResetTimer: () -> Unit,
     onTogglePlay: () -> Unit,
+    onOpenTapTempo: () -> Unit,
+    onOpenTuner: () -> Unit,
     onOpenRecords: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -149,25 +156,73 @@ fun MetronomeScreen(
             }
         }
 
-        // "练习记录"入口：贴在右上角，不占中间那套控件的位置。
-        // 用带底色的按钮而不是纯文字，是为了容易发现（需求要求"容易发现"）。
+        // 顶部三个入口：左"BPM 测速"、中"调音器"、右"练习记录"。
+        // 整行横跨屏幕，每个按钮 weight(1f) 等分宽度，间距一致 —— 一眼看去是一组并列的入口。
         // 加 statusBars 内边距：targetSdk 35 起 Android 15 会强制全屏布局，
-        // 不加的话这个按钮会被状态栏压住。
-        FilledTonalButton(
-            onClick = onOpenRecords,
+        // 不加的话这排按钮会被状态栏压住。
+        Row(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(16.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.DateRange,
-                contentDescription = null,
-                modifier = Modifier.size(ButtonDefaults.IconSize)
+            TopEntryButton(
+                text = "BPM 测速",
+                // 图标库里没有秒表，用"播放"三角表示"开始测速"，和 App 里其他图标的粗细一致。
+                icon = Icons.Filled.PlayArrow,
+                onClick = onOpenTapTempo,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-            Text(text = "练习记录", style = MaterialTheme.typography.labelLarge)
+            TopEntryButton(
+                text = "调音器",
+                icon = Icons.Filled.Build,
+                onClick = onOpenTuner,
+                modifier = Modifier.weight(1f)
+            )
+            TopEntryButton(
+                text = "练习记录",
+                icon = Icons.Filled.DateRange,
+                onClick = onOpenRecords,
+                modifier = Modifier.weight(1f)
+            )
         }
+    }
+}
+
+/**
+ * 顶部的入口按钮：图标 + 文字，用 Material 3 的 FilledTonalButton。
+ *
+ * 用带底色的按钮而不是纯文字，是为了容易发现（需求要求"容易发现"）。
+ * 内边距和文字样式统一写在这里，所以三个入口的尺寸、间距看起来完全一致；
+ * 文字用 labelMedium 而不是默认的 labelLarge，是为了让"BPM 测速"这种较长的标签
+ * 在 360dp 宽的手机上也能和另外两个按钮一样占满各自那一列而不被截断。
+ */
+@Composable
+private fun TopEntryButton(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -274,6 +329,8 @@ private fun MetronomeScreenPreview() {
             onVolumeChange = {},
             onResetTimer = {},
             onTogglePlay = {},
+            onOpenTapTempo = {},
+            onOpenTuner = {},
             onOpenRecords = {}
         )
     }

@@ -18,8 +18,8 @@ android {
         // 支持 Android 5.0 及以上，覆盖面最广。
         minSdk = 21
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.0"
+        versionCode = 7
+        versionName = "2.1"
     }
 
     buildTypes {

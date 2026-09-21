@@ -18,6 +18,8 @@ import com.example.musicpractice.ui.MetronomeScreen
 import com.example.musicpractice.ui.MetronomeViewModel
 import com.example.musicpractice.ui.PracticeRecordsScreen
 import com.example.musicpractice.ui.SplashScreen
+import com.example.musicpractice.ui.TapTempoScreen
+import com.example.musicpractice.ui.TunerScreen
 import com.example.musicpractice.ui.theme.MusicPracticeTheme
 import kotlinx.coroutines.delay
 
@@ -25,13 +27,30 @@ import kotlinx.coroutines.delay
 private const val SPLASH_DURATION_MILLIS = 1300L
 
 /**
+ * 当前显示哪一页。
+ *
+ * 这个 App 只有四个页面，用一个枚举比引入 Navigation 库轻得多。它是可序列化的，
+ * 所以能直接交给 rememberSaveable 保存 —— 转屏、被系统回收后重建，用户还停在原来那一页。
+ */
+private enum class Screen {
+    /** 节拍器主页。 */
+    METRONOME,
+    /** BPM 测速（Tap BPM）。 */
+    TAP_TEMPO,
+    /** 调音器（这一版只有入口和占位页面）。 */
+    TUNER,
+    /** 练习记录。 */
+    RECORDS
+}
+
+/**
  * 应用唯一的 Activity。
  *
  * 它只做三件事：创建 ViewModel、开启 Compose 界面、把界面和 ViewModel 连起来。
  * 节拍逻辑在 ViewModel 和 MetronomeEngine 里，启动页在 SplashScreen 里，功能界面在 MetronomeScreen 里。
  *
- * 两个页面（节拍器、练习记录）之间的切换用一个布尔值表示。项目只有一个功能页，
- * 为它引入 Navigation 库反而更重；这个值用 rememberSaveable 保存，
+ * 四个页面（节拍器、BPM 测速、调音器、练习记录）之间的切换用一个 [Screen] 表示。
+ * 项目页面很少，为它引入 Navigation 库反而更重；这个值用 rememberSaveable 保存，
  * 所以旋转屏幕、被系统回收后重建，用户还停在原来那一页。
  */
 class MainActivity : ComponentActivity() {
@@ -58,46 +77,66 @@ class MainActivity : ComponentActivity() {
                         delay(SPLASH_DURATION_MILLIS)
                         showSplash = false
                     }
-                        SplashScreen()
-                    } else {
-                        // 当前是不是停在"练习记录"页。
-                        var showRecords by rememberSaveable { mutableStateOf(false) }
+                    SplashScreen()
+                } else {
+                    // 当前停在哪一页。默认是节拍器主页。
+                    var screen by rememberSaveable { mutableStateOf(Screen.METRONOME) }
 
-                        // 在记录页按系统返回键：回到节拍器，而不是直接退出 App。
-                        BackHandler(enabled = showRecords) {
-                            showRecords = false
-                        }
+                    // 不在主页时按系统返回键：回到节拍器，而不是直接退出 App。
+                    BackHandler(enabled = screen != Screen.METRONOME) {
+                        screen = Screen.METRONOME
+                    }
 
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.background
-                        ) {
-                            if (showRecords) {
-                                PracticeRecordsScreen(
-                                    state = viewModel.recordsState,
-                                    isSessionRunning = viewModel.uiState.isPlaying,
-                                    onBack = { showRecords = false },
-                                    // 记录页自己会在进入时、以及播放中每秒调用一次，
-                                    // 所以统计数字和"进行中"那一行是活的。
-                                    onRefresh = viewModel::refreshRecords
-                                )
-                            } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        when (screen) {
+                            Screen.METRONOME -> MetronomeScreen(
                                 // state 只读，改动只能通过回调回到 ViewModel —— 数据单向流动。
-                                MetronomeScreen(
-                                    state = viewModel.uiState,
-                                    onDecreaseBpm = viewModel::decreaseBpm,
-                                    onIncreaseBpm = viewModel::increaseBpm,
-                                    onVolumeChange = viewModel::setVolume,
-                                    onResetTimer = viewModel::resetTimer,
-                                    onTogglePlay = viewModel::togglePlay,
-                                    onOpenRecords = { showRecords = true }
-                                )
-                            }
+                                state = viewModel.uiState,
+                                onDecreaseBpm = viewModel::decreaseBpm,
+                                onIncreaseBpm = viewModel::increaseBpm,
+                                onVolumeChange = viewModel::setVolume,
+                                onResetTimer = viewModel::resetTimer,
+                                onTogglePlay = viewModel::togglePlay,
+                                onOpenTapTempo = { screen = Screen.TAP_TEMPO },
+                                onOpenTuner = { screen = Screen.TUNER },
+                                onOpenRecords = { screen = Screen.RECORDS }
+                            )
+
+                            Screen.TAP_TEMPO -> TapTempoScreen(
+                                state = viewModel.tapTempoState,
+                                // 点击时刻在 ViewModel 里取，界面只管"被按了一下"。
+                                onTap = { viewModel.tapTempo() },
+                                onReset = viewModel::resetTapTempo,
+                                onSelectSource = viewModel::selectTapBpmSource,
+                                // 应用之后立刻回到节拍器，用户能马上看到 BPM 变成了多少。
+                                onApplyToMetronome = { bpm ->
+                                    viewModel.setBpm(bpm)
+                                    screen = Screen.METRONOME
+                                },
+                                onBack = { screen = Screen.METRONOME }
+                            )
+
+                            Screen.TUNER -> TunerScreen(
+                                onBack = { screen = Screen.METRONOME }
+                            )
+
+                            Screen.RECORDS -> PracticeRecordsScreen(
+                                state = viewModel.recordsState,
+                                isSessionRunning = viewModel.uiState.isPlaying,
+                                onBack = { screen = Screen.METRONOME },
+                                // 记录页自己会在进入时、以及播放中每秒调用一次，
+                                // 所以统计数字和"进行中"那一行是活的。
+                                onRefresh = viewModel::refreshRecords
+                            )
                         }
                     }
                 }
             }
         }
+    }
 
     override fun onStop() {
         super.onStop()

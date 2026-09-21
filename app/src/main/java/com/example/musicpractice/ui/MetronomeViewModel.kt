@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicpractice.metronome.MetronomeEngine
 import com.example.musicpractice.practice.PracticeTimeManager
+import com.example.musicpractice.tempo.TapTempoTracker
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +43,10 @@ data class MetronomeUiState(
  *
  * 除了节拍本身，它还负责"每日时间记录"：开始播放时开一段练习、停止时结算并存盘。
  * 存储细节交给 [PracticeTimeManager]，这里只做衔接，节拍器的操作逻辑一行没改。
+ *
+ * 另外它也保管"BPM 测速"页面那几个数字（实时 / 平均 BPM、点了几次）。
+ * 测速结果只有一个去处 —— [setBpm]，也就是节拍器自己的那套 BPM 状态，
+ * 所以不存在第二套 BPM，两边永远不会打架。
  */
 class MetronomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -57,6 +62,20 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
     /** "每日时间记录"页面要显示的全部内容。 */
     var recordsState by mutableStateOf(PracticeRecordsUiState())
         private set
+
+    /** "BPM 测速"页面要显示的全部内容。 */
+    var tapTempoState by mutableStateOf(TapTempoUiState())
+        private set
+
+    /**
+     * Tap 测速的计算器。它是纯逻辑、不可变，所以这里只保存"当前那一个"。
+     * 放在 ViewModel 里而不是 Composable 里：屏幕旋转时它跟着 ViewModel 活下来，
+     * 用户刚打的节奏不会因为转屏而白打。
+     */
+    private var tapTracker = TapTempoTracker()
+
+    /** 用户选的是实时 BPM 还是平均 BPM。默认平均，和需求一致。 */
+    private var tapBpmSource = TapBpmSource.AVERAGE
 
     init {
         // 启动时先算一次：如果上次是被强杀的，管理器已经把那段练习结算好了，
@@ -84,6 +103,48 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun decreaseBpm() {
         changeBpm(-BPM_STEP)
+    }
+
+    /**
+     * 直接把速度设成某个值。这是"BPM 测速"页面"应用到节拍器"唯一的入口。
+     *
+     * 用的是和 +/- 按钮同一套状态（uiState.bpm + engine），所以不存在第二套 BPM：
+     * 应用之后，节拍器界面上的数字、引擎实际的节奏、之后再按 +/- 的起点，全都是这个值。
+     * 正在播放时，引擎会在下一拍就按新速度走。
+     */
+    fun setBpm(newBpm: Int) {
+        val clamped = newBpm.coerceIn(MetronomeEngine.MIN_BPM, MetronomeEngine.MAX_BPM)
+        uiState = uiState.copy(bpm = clamped)
+        engine.setBpm(clamped)
+    }
+
+    // ---------------- BPM 测速页面 ----------------
+
+    /**
+     * 用户在测速页面按下了一次 TAP。
+     *
+     * @param atMillis 这次点击的时刻，默认取单调时钟（不会被用户改系统时间影响）。
+     *   参数留了默认值，既方便界面直接调用，也方便以后写测试。
+     */
+    fun tapTempo(atMillis: Long = SystemClock.elapsedRealtime()) {
+        tapTracker = tapTracker.tap(atMillis)
+        refreshTapTempoState()
+    }
+
+    /** 重置：所有点击记录、实时 BPM、平均 BPM 全部清空，回到刚进页面的样子。 */
+    fun resetTapTempo() {
+        tapTracker = TapTempoTracker()
+        refreshTapTempoState()
+    }
+
+    /** 切换"用实时 BPM"还是"用平均 BPM"。 */
+    fun selectTapBpmSource(source: TapBpmSource) {
+        tapBpmSource = source
+        refreshTapTempoState()
+    }
+
+    private fun refreshTapTempoState() {
+        tapTempoState = buildTapTempoUiState(tapTracker, tapBpmSource)
     }
 
     fun setVolume(newVolume: Float) {
@@ -184,11 +245,8 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun changeBpm(delta: Int) {
-        val newBpm = (uiState.bpm + delta)
-            .coerceIn(MetronomeEngine.MIN_BPM, MetronomeEngine.MAX_BPM)
-        uiState = uiState.copy(bpm = newBpm)
-        // 通知引擎。正在播放时，音频线程会用新间隔安排下一拍。
-        engine.setBpm(newBpm)
+        // 和测速页面走同一条路：加减也好、从测速页面直接赋值也好，都只改这一处状态。
+        setBpm(uiState.bpm + delta)
     }
 
     override fun onCleared() {
