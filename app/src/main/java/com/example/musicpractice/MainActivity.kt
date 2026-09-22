@@ -176,6 +176,9 @@ class MainActivity : ComponentActivity() {
 
                             Screen.TUNER -> TunerScreen(
                                 state = tunerViewModel.uiState,
+                                // 音准历史：数据在 ViewModel 里（复用同一份检测结果），
+                                // 界面只读它，并按帧回调推进轨迹时间轴。
+                                history = tunerViewModel.pitchHistory,
                                 onBack = { screen = Screen.METRONOME },
                                 // 页面可见 / 不可见由界面通知 ViewModel：可见就（有权限时）开始采集，
                                 // 不可见立刻停止并释放麦克风。
@@ -183,7 +186,8 @@ class MainActivity : ComponentActivity() {
                                 onScreenPaused = tunerViewModel::onScreenPaused,
                                 onPermissionResult = tunerViewModel::onPermissionResult,
                                 onIncreaseA4 = tunerViewModel::increaseA4,
-                                onDecreaseA4 = tunerViewModel::decreaseA4
+                                onDecreaseA4 = tunerViewModel::decreaseA4,
+                                onHistoryFrame = tunerViewModel::onHistoryFrame
                             )
 
                             Screen.RECORDS -> PracticeRecordsScreen(

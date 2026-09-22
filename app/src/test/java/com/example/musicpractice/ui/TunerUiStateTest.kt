@@ -160,4 +160,19 @@ class TunerUiStateTest {
         assertEquals("-49", state.centsText)
         assertFalse(state.isInTune)
     }
+
+    @Test
+    fun `音准历史只在有效音符且已授权时滚动`() {
+        // 还没有授权：即使这一帧有效也不滚动（此时页面上根本没有栏目）。
+        val notGranted = TunerUiState(micPermission = MicPermissionState.NEEDS_PERMISSION)
+            .withReading(reading(5.0))
+        assertFalse(notGranted.isHistoryRolling)
+
+        // 已授权 + 有效音符：滚动。
+        val rolling = notGranted.copy(micPermission = MicPermissionState.GRANTED)
+        assertTrue(rolling.isHistoryRolling)
+
+        // NOISE：停住（不加点、不移动）。
+        assertFalse(rolling.withReading(TunerReading.NOISE).isHistoryRolling)
+    }
 }

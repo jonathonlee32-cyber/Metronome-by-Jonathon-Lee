@@ -66,6 +66,15 @@ data class TunerUiState(
 
     /** NOISE 指示器是否变蓝。 */
     val isNoise: Boolean get() = !isReliable
+
+    /**
+     * 音准历史轨迹是否在滚动（见 [com.example.musicpractice.ui.PitchHistoryPanel]）。
+     *
+     * 条件：正在采集 + 当前这一帧是有效音符。NOISE 期间为 false —— 轨迹整体停住：
+     * 不加新的轨迹数据、已有的白色曲线／音名标签也不移动。
+     */
+    val isHistoryRolling: Boolean
+        get() = isReliable && micPermission == MicPermissionState.GRANTED
 }
 
 /**

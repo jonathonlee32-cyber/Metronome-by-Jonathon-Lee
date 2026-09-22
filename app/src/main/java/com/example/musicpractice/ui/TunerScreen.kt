@@ -70,12 +70,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.musicpractice.tuner.PitchHistory
 import com.example.musicpractice.tuner.TunerNotes
 import com.example.musicpractice.tuner.TunerSettingsStore
 import com.example.musicpractice.ui.theme.MusicPracticeTheme
 
-/** "已经调准了"的绿色背景。 */
-private val TunedGreen = Color(0xFF2E7D32)
+/** "已经调准了"的绿色背景。音准历史栏目中间那条绿色也用同一个颜色（见 PitchHistoryPanel）。 */
+internal val TunedGreen = Color(0xFF2E7D32)
 
 /** NOISE 指示器在"无法可靠识别"时的蓝色。 */
 private val NoiseBlue = Color(0xFF1E88E5)
@@ -107,6 +108,26 @@ private val HintSlotHeight = 40.dp
 private val HeaderHeight = 48.dp
 
 /**
+ * 音准历史栏目的高度：跟着可用高度取一小段，再夹在上下限之间。
+ *
+ * 按比例取是为了矮屏（横屏尤其矮）不会被栏目吃掉太多读数区；夹上下限是为了高屏上
+ * 栏目不会长得太大、抢了中央音符的位置。
+ */
+private const val PORTRAIT_HISTORY_PANEL_RATIO = 0.22f
+private val PortraitHistoryPanelMinHeight = 88.dp
+private val PortraitHistoryPanelMaxHeight = 148.dp
+
+private const val LANDSCAPE_HISTORY_PANEL_RATIO = 0.26f
+private val LandscapeHistoryPanelMinHeight = 64.dp
+private val LandscapeHistoryPanelMaxHeight = 88.dp
+
+/** 横屏三栏的最小高度：再矮也不低于它，保证音符和音分仍然放得下。 */
+private val LandscapeColumnsMinHeight = 96.dp
+
+/** 横屏里音准历史栏目和上面读数区之间的间距。 */
+private val LandscapeHistoryPanelGap = 10.dp
+
+/**
  * "调音器"页面。
  *
  * 和 [MetronomeScreen]、[TapTempoScreen] 一样是无状态的：它只把 [state] 画出来，
@@ -118,7 +139,8 @@ private val HeaderHeight = 48.dp
  *    显示成可操作的提示（最后一个还提供进系统设置的入口）；
  * 2. 页面可见且已授权时开始实时采集，离开页面或切后台立刻停止（见下面的生命周期观察）；
  * 3. 中央显示当前音名与音分，±10 音分内变绿；
- * 4. 右上角齿轮进入 A4 基准设置。
+ * 4. 下方是音准历史轨迹栏目（[PitchHistoryPanel]），按时间从右向左滚动最近 8 秒的偏差；
+ * 5. 右上角齿轮进入 A4 基准设置。
  *
  * 竖屏和横屏是两套各自独立的布局（[PortraitTunerContent] / [LandscapeTunerContent]），
  * 不是一个布局被拉宽。
@@ -127,12 +149,14 @@ private val HeaderHeight = 48.dp
 @Composable
 fun TunerScreen(
     state: TunerUiState,
+    history: PitchHistory,
     onBack: () -> Unit,
     onScreenResumed: (Any) -> Unit,
     onScreenPaused: (Any) -> Unit,
     onPermissionResult: (granted: Boolean, canAskAgain: Boolean) -> Unit,
     onIncreaseA4: () -> Unit,
     onDecreaseA4: () -> Unit,
+    onHistoryFrame: (deltaMillis: Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -247,11 +271,19 @@ fun TunerScreen(
                             .fillMaxWidth()
                             .weight(1f)
                     ) {
-                        LandscapeTunerContent(state = state)
+                        LandscapeTunerContent(
+                            state = state,
+                            history = history,
+                            onHistoryFrame = onHistoryFrame
+                        )
                     }
                 }
 
-                else -> PortraitTunerContent(state = state)
+                else -> PortraitTunerContent(
+                    state = state,
+                    history = history,
+                    onHistoryFrame = onHistoryFrame
+                )
             }
         }
     }
@@ -313,64 +345,85 @@ private fun LandscapeHeader(
 }
 
 /**
- * 竖屏布局：右上角 NOISE，正中间是音符与音分，底部一行小字说明 A4 基准和识别音域。
+ * 竖屏布局：右上角 NOISE，正中间是音符与音分，下面一条音准历史轨迹，
+ * 最底部一行小字说明 A4 基准和识别音域。
  *
  * 中央用 weight(1f) 占满标题栏以下、底部说明以上的全部空间，所以音符落在视觉正中，
- * 屏幕无论多高多矮都不会偏。
+ * 屏幕无论多高多矮都不会偏。栏目高度按可用高度取一段并夹在上下限之间，矮屏也不会被它挤掉读数。
  */
 @Composable
 private fun PortraitTunerContent(
     state: TunerUiState,
+    history: PitchHistory,
+    onHistoryFrame: (deltaMillis: Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp)
-            .padding(top = 4.dp, bottom = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            NoiseIndicator(isNoise = state.isNoise)
-        }
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val historyPanelHeight = (maxHeight * PORTRAIT_HISTORY_PANEL_RATIO)
+            .coerceIn(PortraitHistoryPanelMinHeight, PortraitHistoryPanelMaxHeight)
 
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .padding(top = 4.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TunerReadout(
-                    state = state,
-                    modifier = Modifier.fillMaxWidth(0.88f),
-                    noteFontSize = PortraitNoteFontSize,
-                    centsFontSize = PortraitCentsFontSize
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                // 固定高度的提示位：有提示、没提示都占同样高，
-                // 所以 NOISE 出现或消失时上面的音符一动不动。
-                HintSlot(
-                    text = tunerHint(state),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                NoiseIndicator(isNoise = state.isNoise)
             }
-        }
 
-        Text(
-            text = referenceLine(state),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    TunerReadout(
+                        state = state,
+                        modifier = Modifier.fillMaxWidth(0.88f),
+                        noteFontSize = PortraitNoteFontSize,
+                        centsFontSize = PortraitCentsFontSize
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    // 固定高度的提示位：有提示、没提示都占同样高，
+                    // 所以 NOISE 出现或消失时上面的音符一动不动。
+                    HintSlot(
+                        text = tunerHint(state),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // 音准历史轨迹：横向贯穿页面可用宽度。NOISE 期间整体停住（见 PitchHistoryPanel）。
+            PitchHistoryPanel(
+                history = history,
+                active = state.isHistoryRolling,
+                onFrame = onHistoryFrame,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(historyPanelHeight)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = referenceLine(state),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
 /**
- * 横屏布局：从左到右三栏 —— 左"识别音域 + 提示"、中"音符与音分"、右"NOISE + A4 基准"。
+ * 横屏布局：上面从左到右三栏 —— 左"识别音域 + 提示"、中"音符与音分"、右"NOISE + A4 基准"；
+ * 下面横向贯穿整个页面的"音准历史轨迹"栏目。
  *
  * 横屏不是把竖屏拉宽：屏幕矮、左右宽，所以把说明信息分到两侧，中间那块读数区独自占满高度、
  * 落在视觉正中。
@@ -382,12 +435,16 @@ private fun PortraitTunerContent(
  * 2. **字号是按可用高度算出来的，不是写死的**。音符（约 44% 高度）+ 音分（约 19% 高度）
  *    合起来永远小于读数区高度，不会出现"音符太大把音分挤出屏幕"的情况；
  *    换算用 Dp.toSp()，会把系统字体缩放一起算进去，用户在系统里调大字号也不会顶破布局。
+ * 3. **栏目高度也参与计算**。三栏的高度 = 可用高度 - 栏目高度 - 间距，字号再由它算出来，
+ *    所以加了栏目之后音符仍然落在剩余区域的正中，不会被栏目压出屏幕。
  *
  * 整页没有滚动容器，所有内容都在一屏内。
  */
 @Composable
 private fun LandscapeTunerContent(
     state: TunerUiState,
+    history: PitchHistory,
+    onHistoryFrame: (deltaMillis: Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(
@@ -397,60 +454,82 @@ private fun LandscapeTunerContent(
             .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
         val density = LocalDensity.current
-        // 读数区能拿到的高度 = 整块可用高度减去中栏上下各 8dp 的留白。
-        val readoutHeight = (maxHeight - 16.dp).coerceAtLeast(96.dp)
+        // 音准历史栏目：横屏矮，所以高度按比例取并夹得更扁一些。
+        val historyPanelHeight = (maxHeight * LANDSCAPE_HISTORY_PANEL_RATIO)
+            .coerceIn(LandscapeHistoryPanelMinHeight, LandscapeHistoryPanelMaxHeight)
+        // 三栏能拿到的高度 = 可用高度 - 栏目高度 - 栏目与三栏之间的间距。
+        val columnsHeight = (maxHeight - historyPanelHeight - LandscapeHistoryPanelGap)
+            .coerceAtLeast(LandscapeColumnsMinHeight)
+        // 读数区能拿到的高度 = 三栏高度减去中栏上下各 8dp 的留白。
+        val readoutHeight = (columnsHeight - 16.dp).coerceAtLeast(96.dp)
         // 按比例给音符和音分分配高度，两者之和只占读数区的一小半，怎么都放得下。
         val noteFontSize = with(density) { (readoutHeight * NOTE_HEIGHT_RATIO).toSp() }
         val centsFontSize = with(density) { (readoutHeight * CENTS_HEIGHT_RATIO).toSp() }
 
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                    .fillMaxWidth()
+                    .height(columnsHeight),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                InfoBlock(label = "识别音域", value = TunerNotes.RANGE_LABEL)
-                // 和竖屏一样：提示位高度固定，出现／消失都不会顶动中间的音符。
-                HintSlot(
-                    text = tunerHint(state),
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1.7f)
-                    .fillMaxHeight()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                TunerReadout(
-                    state = state,
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    noteFontSize = noteFontSize,
-                    centsFontSize = centsFontSize
-                )
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InfoBlock(label = "识别音域", value = TunerNotes.RANGE_LABEL)
+                    // 和竖屏一样：提示位高度固定，出现／消失都不会顶动中间的音符。
+                    HintSlot(
+                        text = tunerHint(state),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1.7f)
+                        .fillMaxHeight()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    TunerReadout(
+                        state = state,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        noteFontSize = noteFontSize,
+                        centsFontSize = centsFontSize
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    NoiseIndicator(isNoise = state.isNoise)
+                    InfoBlock(label = "A4 基准", value = "${state.a4Hz} Hz")
+                }
             }
 
-            Column(
+            Spacer(modifier = Modifier.height(LandscapeHistoryPanelGap))
+
+            // 音准历史轨迹：横向贯穿整个页面宽度。NOISE 期间整体停住（见 PitchHistoryPanel）。
+            PitchHistoryPanel(
+                history = history,
+                active = state.isHistoryRolling,
+                onFrame = onHistoryFrame,
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
-            ) {
-                NoiseIndicator(isNoise = state.isNoise)
-                InfoBlock(label = "A4 基准", value = "${state.a4Hz} Hz")
-            }
+                    .fillMaxWidth()
+                    .height(historyPanelHeight)
+            )
         }
     }
 }
@@ -831,12 +910,15 @@ private fun TunerScreenPreview() {
                 isReliable = true,
                 frequencyHz = 441.27
             ),
+            // 示例轨迹（C4 → D4 → E4）：预览里也能看到连续曲线和音名标签。
+            history = remember { previewPitchHistory() },
             onBack = {},
             onScreenResumed = { _ -> },
             onScreenPaused = { _ -> },
             onPermissionResult = { _, _ -> },
             onIncreaseA4 = {},
-            onDecreaseA4 = {}
+            onDecreaseA4 = {},
+            onHistoryFrame = {}
         )
     }
 }
@@ -848,12 +930,14 @@ private fun TunerScreenEmptyPreview() {
     MusicPracticeTheme {
         TunerScreen(
             state = TunerUiState(micPermission = MicPermissionState.GRANTED),
+            history = remember { PitchHistory() },
             onBack = {},
             onScreenResumed = { _ -> },
             onScreenPaused = { _ -> },
             onPermissionResult = { _, _ -> },
             onIncreaseA4 = {},
-            onDecreaseA4 = {}
+            onDecreaseA4 = {},
+            onHistoryFrame = {}
         )
     }
 }
@@ -871,12 +955,14 @@ private fun TunerScreenLandscapePreview() {
                 isReliable = true,
                 frequencyHz = 466.3
             ),
+            history = remember { previewPitchHistory() },
             onBack = {},
             onScreenResumed = { _ -> },
             onScreenPaused = { _ -> },
             onPermissionResult = { _, _ -> },
             onIncreaseA4 = {},
-            onDecreaseA4 = {}
+            onDecreaseA4 = {},
+            onHistoryFrame = {}
         )
     }
 }
@@ -894,12 +980,14 @@ private fun TunerScreenShortLandscapePreview() {
                 isReliable = true,
                 frequencyHz = 1979.8
             ),
+            history = remember { previewPitchHistory() },
             onBack = {},
             onScreenResumed = { _ -> },
             onScreenPaused = { _ -> },
             onPermissionResult = { _, _ -> },
             onIncreaseA4 = {},
-            onDecreaseA4 = {}
+            onDecreaseA4 = {},
+            onHistoryFrame = {}
         )
     }
 }
@@ -917,12 +1005,15 @@ private fun TunerScreenNoisePreview() {
                 isReliable = false,
                 frequencyHz = 441.27
             ),
+            // NOISE：轨迹整体停住，示例轨迹也就停在原地。
+            history = remember { previewPitchHistory() },
             onBack = {},
             onScreenResumed = { _ -> },
             onScreenPaused = { _ -> },
             onPermissionResult = { _, _ -> },
             onIncreaseA4 = {},
-            onDecreaseA4 = {}
+            onDecreaseA4 = {},
+            onHistoryFrame = {}
         )
     }
 }

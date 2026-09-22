@@ -19,8 +19,8 @@ android {
         minSdk = 21
         targetSdk = 35
         // 版本号规则：每次改动功能 +1（v2.2 -> v2.2.1），versionName 与启动页显示的版本一致。
-        versionCode = 12
-        versionName = "3.2"
+        versionCode = 15
+        versionName = "3.5"
     }
 
     buildTypes {

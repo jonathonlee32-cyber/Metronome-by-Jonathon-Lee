@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import com.example.musicpractice.tuner.PitchHistory
 import com.example.musicpractice.tuner.TunerAudioEngine
 import com.example.musicpractice.tuner.TunerReading
 import com.example.musicpractice.tuner.TunerSettingsStore
@@ -58,6 +59,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     /**
+     * 音准历史：最近 8 秒检测到的音分偏差轨迹（白色曲线和音名标签都从它画出来）。
+     *
+     * 它复用调音器已有的检测结果 —— 只是把 [TunerReading] 里现成的音名和音分记下来，
+     * 没有任何新的音高检测逻辑。界面只读它，写入只有下面两处：
+     * 1. [applyPendingReading]：每收到一帧检测结果就记一次；
+     * 2. [onHistoryFrame]：调音器页每画一帧，推进一次轨迹时间轴。
+     */
+    val pitchHistory = PitchHistory()
+
+    /**
      * 音频线程送来的最新一帧。只保留最新的一帧：界面来不及画就直接用新的覆盖，
      * 这样既不会排队堆积，也不会有"几十帧前的旧结果"被画出来。
      */
@@ -69,9 +80,25 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val reading = pendingReading ?: return@Runnable
         pendingReading = null
         if (!screenVisible) return@Runnable
+        // 历史轨迹和界面状态走的是同一帧数据：有效音高记点、NOISE 什么都不做。
+        pitchHistory.onReading(reading)
         val next = uiState.withReading(reading)
         // 值和上一帧完全一样就不写状态，省掉一次无意义的重组。
         if (next != uiState) uiState = next
+    }
+
+    /**
+     * 调音器页每画一帧调用一次，把轨迹时间轴推进 [deltaMillis] 毫秒。
+     *
+     * **只会在检测到有效音高（不是 NOISE）时被调用**：所以时间轴只在"真的有声音"时前进，
+     * 轨迹按真实时间从右向左滚动，和刷新率无关；NOISE 期间时间轴不动，
+     * 白色曲线和音名标签全部原地停住，恢复检测后再从右边缘继续。
+     *
+     * 这个方法只改一个 Long（加一次、再裁掉滚出窗口的点），没有状态写入、没有重组，
+     * 也完全不在音频线程上，所以不会影响检测延迟。
+     */
+    fun onHistoryFrame(deltaMillis: Long) {
+        pitchHistory.advance(deltaMillis)
     }
 
     // ---------------- 页面生命周期 ----------------
