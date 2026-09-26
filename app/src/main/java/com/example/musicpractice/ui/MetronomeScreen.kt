@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.musicpractice.metronome.MetronomeEngine
+import com.example.musicpractice.R
 import com.example.musicpractice.ui.theme.MusicPracticeTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -106,8 +108,10 @@ private const val MIN_LANDSCAPE_SCALE = 0.78f
  * - 横屏（[LandscapeMetronomeContent]）：从左到右分成节拍器核心 / 音量 / 功能入口三栏。
  * 旋转屏幕时系统会重建 Activity，这里读到的方向永远是最新的。
  *
- * 两个布局都多了一个「乐谱阅读器」入口：竖屏在页面底部居中，横屏排在"练习记录"下面。
- * 两者都只是叠在原布局之上 / 追加一栏里的一个按钮，原有控件的位置和大小一点没变。
+ * 两个布局都带功能入口：竖屏在页面底部一排（「乐谱阅读器」+「录音」，两个按钮并排等宽，
+ * 不再是"乐谱阅读器孤零零居中"），横屏在右边一栏里排成两列
+ * （第一列 BPM 测速 / 调音器 / 练习记录，第二列 乐谱阅读器 / 录音）。
+ * 竖屏那排是叠在原布局之上的，原有控件的位置和大小一点没变。
  */
 @Composable
 fun MetronomeScreen(
@@ -121,6 +125,7 @@ fun MetronomeScreen(
     onOpenTuner: () -> Unit,
     onOpenRecords: () -> Unit,
     onOpenScoreReader: () -> Unit,
+    onOpenRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (isLandscapeScreen()) {
@@ -135,6 +140,7 @@ fun MetronomeScreen(
             onOpenTuner = onOpenTuner,
             onOpenRecords = onOpenRecords,
             onOpenScoreReader = onOpenScoreReader,
+            onOpenRecording = onOpenRecording,
             modifier = modifier
         )
     } else {
@@ -149,6 +155,7 @@ fun MetronomeScreen(
             onOpenTuner = onOpenTuner,
             onOpenRecords = onOpenRecords,
             onOpenScoreReader = onOpenScoreReader,
+            onOpenRecording = onOpenRecording,
             modifier = modifier
         )
     }
@@ -166,8 +173,9 @@ private fun isLandscapeScreen(): Boolean =
  * 它们用 Box 叠在原有内容之上，所以中间那套 BPM / 音量 / 计时 / 播放按钮的位置一点没动。
  * 三个按钮等分整行宽度、同一个图标尺寸和文字样式，看起来就是一组入口。
  *
- * 底部居中还有一个「乐谱阅读器」入口，同样是叠上去的：页面本身仍然没有滚动容器，
- * 中间那套控件也照旧垂直居中，不会被挤动。
+ * 底部一排是两个入口：「乐谱阅读器」和「录音」，等宽并排（需求三）——
+ * 乐谱阅读器不再单独居中，录音就在它旁边。这一排同样是叠上去的：
+ * 页面本身仍然没有滚动容器，中间那套控件也照旧垂直居中，不会被挤动。
  */
 @Composable
 private fun PortraitMetronomeContent(
@@ -181,6 +189,7 @@ private fun PortraitMetronomeContent(
     onOpenTuner: () -> Unit,
     onOpenRecords: () -> Unit,
     onOpenScoreReader: () -> Unit,
+    onOpenRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -292,24 +301,33 @@ private fun PortraitMetronomeContent(
            )
        }
 
-        // 底部居中的「乐谱阅读器」入口。
-        // 和顶部那排一样叠在内容之上，所以中间那套 BPM / 音量 / 计时 / 播放按钮的位置完全没有变化，
-        // 页面也没有因此变成可滚动的。
-        // 加 navigationBars 内边距：手势导航条或三键导航栏都不会压住这个按钮。
-        Box(
+        // 底部一排入口：「乐谱阅读器」+「录音」（需求三）。
+        // 两个按钮 weight(1f) 等分整行宽度、间距 8dp，和顶部那排三个入口是同一种排法，
+        // 所以"乐谱阅读器"不再孤零零地居中，录音就在它右边。
+        // 这一排和顶部那排一样叠在内容之上，所以中间那套 BPM / 音量 / 计时 / 播放按钮的位置
+        // 完全没有变化，页面也没有因此变成可滚动的。
+        // 加 navigationBars 内边距：手势导航条或三键导航栏都不会压住这两个按钮。
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = 12.dp, vertical = 12.dp),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TopEntryButton(
                 text = "乐谱阅读器",
                 // 图标库里没有乐谱，用"文本行"表示乐谱的谱表线，和 App 里其他图标的粗细一致。
                 icon = Icons.AutoMirrored.Filled.List,
                 onClick = onOpenScoreReader,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f)
+            )
+            TopEntryButton(
+                text = "录音",
+                // 麦克风图标是项目自己放的一份矢量图（基础图标库里没有麦克风）。
+                icon = ImageVector.vectorResource(R.drawable.ic_mic),
+                onClick = onOpenRecording,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -318,8 +336,9 @@ private fun PortraitMetronomeContent(
 /**
  * 横屏布局：从左到右三栏 —— 左"节拍器核心"、中"音量"、右"功能入口"。
  *
- * 三栏宽度按 weight 分配（3 : 2 : 3），所以从 16:9 到 21:9 的横屏都能按比例摊开，
- * 三栏之间还有固定的 16dp 间距，永远不会互相重叠。
+ * 三栏宽度按 weight 分配（3 : 2 : 4），所以从 16:9 到 21:9 的横屏都能按比例摊开，
+ * 三栏之间还有固定的 16dp 间距，永远不会互相重叠。右边那栏比 v4.2 稍宽一点：
+ * 它是五个功能入口，要排成两列（否则 5 个 52dp 的按钮在横屏的竖直空间里会挤在一起）。
  *
  * 整页没有任何滚动容器（没有 ScrollView，也没有 verticalScroll / horizontalScroll）：
  * 高度方向用 Arrangement.SpaceEvenly / Center 把内容排满整屏，再配合 [scale] 在矮屏上
@@ -340,6 +359,7 @@ private fun LandscapeMetronomeContent(
     onOpenTuner: () -> Unit,
     onOpenRecords: () -> Unit,
     onOpenScoreReader: () -> Unit,
+    onOpenRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(
@@ -446,50 +466,72 @@ private fun LandscapeMetronomeContent(
                 )
             }
 
-            // ---------------- 右：四个功能入口 ----------------
-            Column(
+            // ---------------- 右：五个功能入口（两列） ----------------
+            Row(
                 modifier = Modifier
-                    .weight(3f)
+                    .weight(4f)
                     .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 顺序固定：BPM 测速 → 调音器 → 练习记录 → 乐谱阅读器。
-                // 按钮本身是横向矩形，四个从上到下排成一列；宽度只占本栏，本栏右侧还有
-                // 外层 20dp 内边距和系统栏内边距，所以不会贴到屏幕最右边。
-                // 四个按钮高度都是 52dp、由 SpaceEvenly 均分本栏高度，所以大小一致、间距一致。
-                TopEntryButton(
-                    text = "BPM 测速",
-                    icon = Icons.Filled.PlayArrow,
-                    onClick = onOpenTapTempo,
+                // 第一列：BPM 测速 / 调音器 / 练习记录（顺序和 v4.2 一样）。
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                )
-                TopEntryButton(
-                    text = "调音器",
-                    icon = Icons.Filled.Build,
-                    onClick = onOpenTuner,
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TopEntryButton(
+                        text = "BPM 测速",
+                        icon = Icons.Filled.PlayArrow,
+                        onClick = onOpenTapTempo,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                    TopEntryButton(
+                        text = "调音器",
+                        icon = Icons.Filled.Build,
+                        onClick = onOpenTuner,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                    TopEntryButton(
+                        text = "练习记录",
+                        icon = Icons.Filled.DateRange,
+                        onClick = onOpenRecords,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                }
+
+                // 第二列：乐谱阅读器 / 录音。
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                )
-                TopEntryButton(
-                    text = "练习记录",
-                    icon = Icons.Filled.DateRange,
-                    onClick = onOpenRecords,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                )
-                TopEntryButton(
-                    text = "乐谱阅读器",
-                    icon = Icons.AutoMirrored.Filled.List,
-                    onClick = onOpenScoreReader,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                )
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TopEntryButton(
+                        text = "乐谱阅读器",
+                        icon = Icons.AutoMirrored.Filled.List,
+                        onClick = onOpenScoreReader,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                    TopEntryButton(
+                        text = "录音",
+                        icon = ImageVector.vectorResource(R.drawable.ic_mic),
+                        onClick = onOpenRecording,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                }
             }
         }
     }
@@ -730,7 +772,8 @@ private fun MetronomeScreenPreview() {
             onOpenTapTempo = {},
             onOpenTuner = {},
             onOpenRecords = {},
-            onOpenScoreReader = {}
+            onOpenScoreReader = {},
+            onOpenRecording = {}
         )
     }
 }
@@ -750,7 +793,8 @@ private fun MetronomeScreenLandscapePreview() {
             onOpenTapTempo = {},
             onOpenTuner = {},
             onOpenRecords = {},
-            onOpenScoreReader = {}
+            onOpenScoreReader = {},
+            onOpenRecording = {}
         )
     }
 }

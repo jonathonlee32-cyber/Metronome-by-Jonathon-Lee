@@ -79,6 +79,27 @@ class ScoreLibraryManager(private val storage: ScoreProjectStorage) {
     }
 
     /**
+     * 重命名一个项目（需求一：长按项目 → 重命名 → 改数据库里的项目名称）。
+     *
+     * 只写这一个项目那一行（名字），用户原来的 PDF / 图片文件、导入时拷的本地副本、
+     * 阅读进度全都不受影响 —— 名字只是显示用的。
+     *
+     * @return 重命名后的项目；名字为空或 id 不在库里时返回 null。
+     */
+    fun rename(id: String, name: String): ScoreProject? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        val current = library.project(id) ?: return null
+        if (current.name == trimmed) return current
+
+        val updated = library.rename(id, trimmed)
+        if (updated === library) return null
+        library = updated
+        storage.saveProject(current.copy(name = trimmed))
+        return library.project(id)
+    }
+
+    /**
      * 删除一个项目（需求五：长按删除），返回被删掉的那条记录；id 不在库里时返回 null。
      *
      * 返回被删的项目是为了让调用方知道要清理哪些**本地副本**（App 私有目录里导入时拷的那几份

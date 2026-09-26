@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  暂停图标（Material Icons 的 pause，Apache 2.0）。
+
+  播放页中央那个大按钮在"播放 / 暂停"之间切换：播放用系统自带的 Icons.Filled.PlayArrow，
+  暂停用这一份矢量图 —— 两者都是两根粗笔画，粗细感一致。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M6,19h4V5H6v14zM14,5v14h4V5h-4z" />
+</vector>

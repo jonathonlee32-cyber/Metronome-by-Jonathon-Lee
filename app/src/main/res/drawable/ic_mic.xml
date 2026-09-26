@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  麦克风图标（Material Icons 的 mic，Apache 2.0）。
+
+  项目原先只用系统自带的 Icons.Filled.* 图标，但"录音 / 播放"这几个图形不在那套基础图标里，
+  为了不引入体积巨大的 material-icons-extended，这里按项目"零第三方依赖"的原则
+  自己放一份矢量图：颜色填黑色，显示时由 Compose 的 Icon 按主题着色。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17,11c0,2.76 -2.24,5 -5,5s-5,-2.24 -5,-5H5c0,3.53 2.61,6.43 6,6.92V21h2v-3.08c3.39,-0.49 6,-3.39 6,-6.92h-2z" />
+</vector>

@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,11 +52,14 @@ import com.example.musicpractice.ui.theme.MusicPracticeTheme
  * - 每一行显示项目名称、类型（PDF / 图片）和最近打开时间（"刚刚打开""昨天打开"这种说法）；
  * - 顺序由数据层排好：最近打开的在上（[ScoreProject] 的列表进来时就已经按最近打开时间倒序）；
  * - 点一下打开这个项目：PDF 项目进 PDF 阅读页，图片项目进图片阅读页，同时刷新最近打开时间；
- * - **长按**弹删除确认窗口，确认后只删 App 里的项目记录，用户原来的文件不碰。
+ * - **长按**弹出操作菜单（需求一）：删除 / 重命名 —— PDF 项目和图片项目都支持；
+ * - 删除会再确认一次，确认后只删 App 里的项目记录和导入时拷的本地副本，用户原来的文件不碰；
+ * - 重命名只改数据库里的项目名称，文件、图片顺序、阅读进度都不受影响。
  *
  * @param projects 全部项目，已经按最近打开时间倒序（数据层排的，界面不再排一遍）。
  * @param onBack 左上角返回：回到乐谱阅读器主页（三个入口那一页）。
  * @param onOpenProject 点一下某一行。
+ * @param onRenameProject 重命名窗口确认后调用（参数是原项目和新名字）。
  * @param onDeleteProject 删除确认窗口里点了"删除"。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,11 +70,15 @@ fun RecentProjectsScreen(
     isImporting: Boolean,
     onBack: () -> Unit,
     onOpenProject: (ScoreProject) -> Unit,
+    onRenameProject: (ScoreProject, String) -> Unit,
     onDeleteProject: (ScoreProject) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    // 正等着确认删除的项目；null 表示没有弹窗。
+    // 长按之后的一串状态：先弹操作菜单（需求一），选了删除 / 重命名再弹对应的窗口。
+    // 记住的都是"哪个项目"，所以弹窗期间列表怎么变都不影响它。
+    var actionTarget by remember { mutableStateOf<ScoreProject?>(null) }
+    var renameTarget by remember { mutableStateOf<ScoreProject?>(null) }
     var pendingDelete by remember { mutableStateOf<ScoreProject?>(null) }
 
     // "相对时间"要有一个"现在"作参照。它只跟着列表内容变，不需要每秒钟重算 ——
@@ -133,7 +138,7 @@ fun RecentProjectsScreen(
             ) {
                 item(key = "hint") {
                     Text(
-                        text = "共 ${projects.size} 个项目 · 点一下打开，长按删除",
+                        text = "共 ${projects.size} 个项目 · 点一下打开，长按更多操作",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -145,17 +150,50 @@ fun RecentProjectsScreen(
                         project = project,
                         timeText = ScoreTimeFormat.describeLastOpened(project.lastOpenedAtMillis, nowMillis),
                         onClick = { onOpenProject(project) },
-                        onLongClick = { pendingDelete = project }
+                        onLongClick = { actionTarget = project }
                     )
                 }
             }
         }
     }
 
+    // 长按后的操作菜单（需求一）：删除 / 重命名；PDF 项目和图片项目走的是同一套。
+    actionTarget?.let { project ->
+        EntryActionMenuDialog(
+            title = project.name,
+            onDismiss = { actionTarget = null },
+            onRename = {
+                actionTarget = null
+                renameTarget = project
+            },
+            onDelete = {
+                actionTarget = null
+                pendingDelete = project
+            }
+        )
+    }
+
+    // 重命名：输入框里预填当前项目名，确认后只改数据库里的名字。
+    renameTarget?.let { project ->
+        RenameEntryDialog(
+            title = "重命名项目",
+            currentName = project.name,
+            placeholder = "例如：《Sound Euphonium》",
+            onDismiss = { renameTarget = null },
+            onConfirm = { newName ->
+                renameTarget = null
+                onRenameProject(project, newName)
+            }
+        )
+    }
+
     // 删除确认窗口。要删的项目被单独存下来，所以弹窗期间列表怎么变都不影响它。
     pendingDelete?.let { project ->
-        DeleteProjectDialog(
-            project = project,
+        DeleteEntryDialog(
+            title = "删除项目",
+            message = "是否删除项目：\n${project.name}？\n\n" +
+                "只会删掉 App 里的这条项目记录（以及导入时拷贝的本地副本），" +
+                "你原来的 PDF / 图片文件不会被删除。",
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
@@ -244,46 +282,6 @@ private fun ProjectKindLabel(isImageProject: Boolean) {
     }
 }
 
-/**
- * 删除确认窗口（需求五）。
- *
- * 文案里明确写出"只删 App 里的记录、不动你原来的文件"：删除是不可撤销的动作，
- * 该让用户知道到底会删掉什么。
- */
-@Composable
-private fun DeleteProjectDialog(
-    project: ScoreProject,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "删除项目") },
-        text = {
-            Column {
-                Text(text = "是否删除项目：\n${project.name}？")
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "只会删掉 App 里的这条项目记录（以及导入时拷贝的本地副本），" +
-                        "你原来的 PDF / 图片文件不会被删除。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = "删除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "取消")
-            }
-        }
-    )
-}
-
 @Preview(showBackground = true, widthDp = 360, heightDp = 780)
 @Composable
 private fun RecentProjectsScreenPreview() {
@@ -317,6 +315,7 @@ private fun RecentProjectsScreenPreview() {
             isImporting = false,
             onBack = {},
             onOpenProject = {},
+            onRenameProject = { _, _ -> },
             onDeleteProject = {}
         )
     }

@@ -21,8 +21,8 @@ android {
         minSdk = 21
         targetSdk = 35
         // 版本号规则：每次改动功能 +1（v2.2 -> v2.2.1），versionName 与启动页显示的版本一致。
-        versionCode = 18
-        versionName = "4.2"
+        versionCode = 20
+        versionName = "5.1"
     }
 
     buildTypes {
@@ -52,6 +52,13 @@ android {
         // 这种会走到日志分支的路径也能被测到。只影响单元测试，不影响 App 行为。
         unitTests.isReturnDefaultValues = true
     }
+}
+
+// Room 把数据库的表结构导出成 JSON 存进仓库（app/schemas/）：
+// v5.1 起录音库有了版本迁移（v1 → v2 加音准分析的两张表），导出 schema 之后，
+// "当初的表长什么样"有据可查，以后写迁移时能直接对着看，也不容易写错。
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

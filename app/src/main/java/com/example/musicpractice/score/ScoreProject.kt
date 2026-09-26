@@ -160,6 +160,21 @@ data class ScoreLibrary(
     }
 
     /**
+     * 改一个项目的名字（需求一：长按项目 → 重命名）。
+     *
+     * 只改名字，别的字段一个字都不动：文件、图片顺序、读到第几页、创建时间、
+     * 最近打开时间全都保持原样。名字去掉首尾空白之后为空、或者和原来一样时原样返回
+     * （免得出现"没有名字的项目"或者白写一次数据库）。
+     */
+    fun rename(id: String, name: String): ScoreLibrary {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return this
+        val current = project(id) ?: return this
+        if (current.name == trimmed) return this
+        return update(id) { it.copy(name = trimmed) }
+    }
+
+    /**
      * 删除一个项目（需求五：长按删除）。
      *
      * 只动"库里有哪些项目"这件事，用户原来的 PDF / 图片文件一个字都不碰 ——

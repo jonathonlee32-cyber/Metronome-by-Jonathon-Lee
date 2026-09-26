@@ -112,12 +112,24 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun onScreenResumed(token: Any) {
         activeToken = token
         screenVisible = true
+        // v5.1：录音的「音准分析」页也能改 A4 基准，而且改的是同一个设置文件。
+        // 所以每次调音器页面变可见都重新读一次设置 —— 用户在分析页改成 442，
+        // 回来打开调音器看到的就是 442（需求五：两个模块共享同一个基准音高）。
+        syncReferenceFromSettings()
         if (hasMicPermission()) {
             startListening()
         } else {
             stopListening()
             uiState = uiState.copy(micPermission = permissionWithoutAccess())
         }
+    }
+
+    /** 把界面上显示的 A4 基准同步成设置文件里的值（音准分析页可能刚改过）。 */
+    private fun syncReferenceFromSettings() {
+        val stored = settings.readA4Hz()
+        if (stored == uiState.a4Hz) return
+        uiState = uiState.withReferenceA4Hz(stored)
+        engine?.setReferenceA4Hz(stored)
     }
 
     /**

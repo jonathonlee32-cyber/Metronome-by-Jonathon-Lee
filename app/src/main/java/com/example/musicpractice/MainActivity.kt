@@ -27,6 +27,10 @@ import com.example.musicpractice.ui.MetronomeViewModel
 import com.example.musicpractice.ui.ScoreSortScreen
 import com.example.musicpractice.ui.ScoreViewerScreen
 import com.example.musicpractice.ui.PracticeRecordsScreen
+import com.example.musicpractice.ui.RecordingListScreen
+import com.example.musicpractice.ui.RecordingPlayerScreen
+import com.example.musicpractice.ui.RecordingScreen
+import com.example.musicpractice.ui.RecordingViewModel
 import com.example.musicpractice.ui.RecentProjectsScreen
 import com.example.musicpractice.ui.ScoreReaderActions
 import com.example.musicpractice.ui.ScoreReaderScreen
@@ -63,7 +67,16 @@ private enum class Screen {
     /** 乐谱阅读器的阅读页：PDF 项目和图片项目都用它。 */
     SCORE_VIEWER,
     /** 图片项目的排序页（图片总览 + 图片查看界面）。 */
-    SCORE_SORT
+    SCORE_SORT,
+
+    /** 录音页：一个大按钮，点一下开始、再点一下结束（需求四）。 */
+    RECORDING,
+
+    /** 最近录音：全部录音按录音时间倒序（需求六）。 */
+    RECORDING_LIST,
+
+    /** 录音播放页：放 / 暂停、进度条、分析音准按钮（需求七、八）。 */
+    RECORDING_PLAYER
 }
 
 /**
@@ -72,7 +85,8 @@ private enum class Screen {
  * 只有乐谱阅读器（主页 + 最近项目 + 阅读页 + 排序页）强制竖屏（需求二）：乐谱是竖幅的，
  * 横屏会把整页压得很小，而且阅读页还要"点一下全屏"，方向交给自己控制更稳。
  *
- * 其余页面（节拍器、BPM 测速、调音器、练习记录）仍然跟着设备方向走 ——
+ * 其余页面（节拍器、BPM 测速、调音器、练习记录，以及 v5.0 新增的录音页、最近录音、
+ * 录音播放页）仍然跟着设备方向走（需求十：新增页面都要支持横屏，所以它们**不**在这里锁定）——
  * 从乐谱阅读器返回节拍器时，这个判断自然变回 false，方向就还给系统了，
  * 原有的横竖屏逻辑一行没改。
  */
@@ -125,6 +139,14 @@ class MainActivity : ComponentActivity() {
      */
     private val scoreReaderViewModel: ScoreReaderViewModel by viewModels()
 
+    /**
+     * 录音模块自己的 ViewModel（需求十二：录音模块独立设计）。
+     *
+     * 它管录音、录音列表和录音播放三件事（见 [RecordingViewModel]），
+     * 和节拍器、调音器、乐谱阅读器的状态完全分开：录音出任何问题都不会碰到别处的功能。
+     */
+    private val recordingViewModel: RecordingViewModel by viewModels()
+
     // 这里刻意在启动页期间锁竖屏（需求要求开屏页面永远是竖屏），启动页一结束就恢复
     // SCREEN_ORIENTATION_UNSPECIFIED，所以主页面和 BPM 测速页都能正常横屏。
     // Lint 的 SourceLockedOrientationActivity 是针对"整个 Activity 被锁死方向"的提醒，
@@ -175,6 +197,10 @@ class MainActivity : ComponentActivity() {
                 // - 返回节拍器后再点一次「乐谱阅读器」，能回到"刚刚打开的那份"（需求八 情况2）。
                 var openScoreProjectId by rememberSaveable { mutableStateOf(restoredProject?.id) }
 
+                // 播放页正在放的是哪一段录音（录音 id）。
+                // 和 screen 一起被 rememberSaveable 保存，所以转屏之后还停在同一个播放页上。
+                var openRecordingId by rememberSaveable { mutableStateOf<String?>(null) }
+
                 // 状态栏图标颜色跟着画面走：启动页是深蓝底 → 白色图标；
                 // 进功能页后跟随主题（浅色主题 → 深色图标，深色主题 → 白色图标）。
                 ApplySystemBarAppearance(
@@ -221,6 +247,11 @@ class MainActivity : ComponentActivity() {
                             Screen.SCORE_SORT -> Screen.SCORE_VIEWER
                             // 最近项目是从"三个入口"的主页点进来的，返回就回主页。
                             Screen.SCORE_RECENT -> Screen.SCORE_READER
+                            // 录音的三个页面是一层层进去的：播放页 → 最近录音 → 录音页 → 节拍器。
+                            // 离开播放页时播放位置会被保存下来（见 RecordingPlayerScreen 的收尾），
+                            // 所以这样返回不会丢掉"听到哪儿了"。
+                            Screen.RECORDING_PLAYER -> Screen.RECORDING_LIST
+                            Screen.RECORDING_LIST -> Screen.RECORDING
                             else -> Screen.METRONOME
                         }
                     }
@@ -321,7 +352,8 @@ class MainActivity : ComponentActivity() {
                                 onOpenTapTempo = { screen = Screen.TAP_TEMPO },
                                 onOpenTuner = { screen = Screen.TUNER },
                                 onOpenRecords = { screen = Screen.RECORDS },
-                                onOpenScoreReader = openScoreReader
+                                onOpenScoreReader = openScoreReader,
+                                onOpenRecording = { screen = Screen.RECORDING }
                             )
 
                             Screen.TAP_TEMPO -> TapTempoScreen(
@@ -387,6 +419,16 @@ class MainActivity : ComponentActivity() {
                                     openScoreProjectId = project.id
                                     screen = Screen.SCORE_VIEWER
                                 },
+                                onRenameProject = { project, newName ->
+                                    // 重命名（需求一）：只改数据库里的项目名称，文件和阅读进度都不动。
+                                    val renamed = scoreReaderViewModel.renameProject(project.id, newName)
+                                    val message = if (renamed == null) {
+                                        "重命名失败"
+                                    } else {
+                                        "已重命名为：$renamed"
+                                    }
+                                    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                                },
                                 onDeleteProject = { project ->
                                     scoreReaderViewModel.deleteProject(project.id)
                                     // 删掉的正好是"当前打开着的项目"时，把它从状态里清掉，
@@ -438,6 +480,89 @@ class MainActivity : ComponentActivity() {
                                         onResetOrder = {
                                             scoreReaderViewModel.resetImageOrder(project.id)
                                         }
+                                    )
+                                }
+                            }
+
+                            // ---------------- 录音（v5.0 新增） ----------------
+
+                            Screen.RECORDING -> RecordingScreen(
+                                state = recordingViewModel.uiState,
+                                // 已经录了多少段：从录音库现取，所以从最近录音删掉几段之后
+                                // 回到这一页，入口上的数字也是对的。
+                                recordingsCount = recordingViewModel.recordings().size,
+                                onBack = { screen = Screen.METRONOME },
+                                // 点一下开始、再点一下结束（需求四）。录音时不会去碰节拍器：
+                                // 节拍器正在响就继续响（需求九）。
+                                onToggleRecording = recordingViewModel::toggleRecording,
+                                onOpenRecordings = { screen = Screen.RECORDING_LIST }
+                            )
+
+                            Screen.RECORDING_LIST -> RecordingListScreen(
+                                // 已经按录音时间倒序（需求六：最新的排在最上面）。
+                                recordings = recordingViewModel.recordings(),
+                                onBack = { screen = Screen.RECORDING },
+                                onOpenRecording = { recording ->
+                                    openRecordingId = recording.id
+                                    screen = Screen.RECORDING_PLAYER
+                                },
+                                onRenameRecording = { recording, newName ->
+                                    // 重命名只改数据库里的显示名，磁盘上的音频文件不动。
+                                    val renamed = recordingViewModel.renameRecording(recording.id, newName)
+                                    val message = if (renamed == null) {
+                                        "重命名失败"
+                                    } else {
+                                        "已重命名为：$renamed"
+                                    }
+                                    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                                },
+                                onDeleteRecording = { recording ->
+                                    recordingViewModel.deleteRecording(recording.id)
+                                    // 删掉的正好是"当前打开着的播放项"时清掉它，
+                                    // 免得之后又进到一个已经不存在的录音里。
+                                    if (openRecordingId == recording.id) {
+                                        openRecordingId = null
+                                    }
+                                    Toast.makeText(this, "已删除：${recording.name}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+
+                            Screen.RECORDING_PLAYER -> {
+                                val recording = recordingViewModel.recording(openRecordingId)
+                                if (recording == null) {
+                                    // 录音不见了（被删掉或数据损坏）：退回最近录音，
+                                    // 而不是停在一个什么都播不了的页面上。
+                                    LaunchedEffect(Unit) { screen = Screen.RECORDING_LIST }
+                                } else {
+                                    RecordingPlayerScreen(
+                                        recording = recording,
+                                        state = recordingViewModel.playbackState,
+                                        // 音准分析：进度 / 已有结果 / 基准音高（v5.1）。
+                                        pitch = recordingViewModel.pitchState,
+                                        // 返回最近录音；离开播放页时的收尾（保存播放位置、
+                                        // 释放播放器）由播放页自己的 DisposableEffect 负责。
+                                        onBack = { screen = Screen.RECORDING_LIST },
+                                        onPrepare = recordingViewModel::preparePlayback,
+                                        onClose = recordingViewModel::closePlayback,
+                                        onTogglePlay = recordingViewModel::togglePlayback,
+                                        onSeek = recordingViewModel::seekTo,
+                                        onSeekFinished = recordingViewModel::commitPosition,
+                                        // 需求九：开始播放录音之前，如果节拍器正在响就先暂停它
+                                        // （走的就是节拍器自己那个「暂停」，练习记录照常结算）。
+                                        // 播放结束**不**自动恢复节拍器。
+                                        onPauseMetronome = viewModel::pauseIfPlaying,
+                                        // v5.1：点「分析音准」开始离线分析（复用调音器的音高算法），
+                                        // 分析在协程里跑，界面只显示进度。
+                                        onStartAnalysis = {
+                                            recordingViewModel.startPitchAnalysis(recording.id)
+                                        },
+                                        onShowAnalysisProgress = recordingViewModel::showAnalysisProgress,
+                                        // "后台继续"：只收起进度界面，分析照旧跑到完。
+                                        onDismissAnalysisProgress = recordingViewModel::dismissAnalysisProgress,
+                                        onDismissAnalysisError = recordingViewModel::dismissAnalysisError,
+                                        // 基准音高加减：和调音器共用同一个设置文件（需求五）。
+                                        onIncreaseReference = recordingViewModel::increaseAnalysisReference,
+                                        onDecreaseReference = recordingViewModel::decreaseAnalysisReference
                                     )
                                 }
                             }

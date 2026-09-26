@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,12 +39,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +69,7 @@ import com.example.musicpractice.score.ScoreProject
 import com.example.musicpractice.score.ScoreProjectKind
 import com.example.musicpractice.ui.theme.MusicPracticeTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -69,6 +78,8 @@ import kotlinx.coroutines.withContext
  * 交互（需求五 / 六）：
  * - 左右滑动翻页：向左滑是下一页、向右滑是上一页 —— 用 Compose 的 [HorizontalPager]，
  *   它本身就是这个方向约定，翻页动画也由它负责；
+ * - 外部输入翻页（需求二）：键盘 / 蓝牙翻页器 / 蓝牙键盘 / `adb shell input keyevent` 发出的
+ *   上键、右键、PageDown 都是下一页，下键、左键、PageUp 都是上一页 —— 按下的那一刻就翻页；
  * - 点击阅读区域进 / 出全屏：全屏时顶栏、页码条和系统状态栏一起收起来，整屏都是乐谱；
  * - 左上角返回：直接回节拍器主页面，不经过"乐谱阅读器主页"；
  * - 翻到第几页会立刻记下来（[onPageChanged]）：退出再进来接着上次那一页看（需求一）。
@@ -184,8 +195,33 @@ private fun ScoreViewerContent(
     val startPdfImport = rememberPdfImportFlow(onImport = actions.onImportPdf)
     val startImageImport = rememberImageImportFlow(onImport = actions.onImportImages)
 
+    // ---------------- 外部输入翻页（需求二） ----------------
+    //
+    // 翻页动作只有一处：算出"该翻到第几页"，交给同一个 Pager 翻过去。
+    // 键盘、蓝牙翻页器、`adb shell input keyevent` 走的都是这个 nextPage / previousPage，
+    // 左右滑动本来就是这个 Pager 的手势，两者用的是同一套翻页逻辑和动画，不存在第二份实现。
+    val pageTurnScope = rememberCoroutineScope()
+    val turnToPage: (Int) -> Unit = { target ->
+        if (target != pagerState.currentPage) {
+            pageTurnScope.launch { pagerState.animateScrollToPage(target) }
+        }
+    }
+    val nextPage: () -> Unit = { turnToPage(nextPageIndex(pagerState.currentPage, pageCount)) }
+    val previousPage: () -> Unit = { turnToPage(previousPageIndex(pagerState.currentPage, pageCount)) }
+
+    // 按键事件只会送给"有焦点的节点"，所以进这一页就把焦点拿到自己身上；
+    // 焦点在这个页面的根布局上，任何一个翻页键都能在冒泡之前被截住（onPreviewKeyEvent）。
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(project.id) { focusRequester.requestFocus() }
+
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                handleReaderPageKey(event, onNextPage = nextPage, onPreviousPage = previousPage)
+            },
         topBar = {
             if (!fullscreen) {
                 TopAppBar(
@@ -292,6 +328,35 @@ private fun ScoreViewerContent(
     if (isImporting) {
         ImportingIndicator(text = "正在导入…")
     }
+}
+
+/**
+ * 处理一次按键：是翻页键就翻页，并把事件"吃掉"（返回 true），不是就原样交回给系统。
+ *
+ * 为什么用 onPreviewKeyEvent（在事件往下传之前先看到它）：
+ * 上下左右四个方向键在 Android 上默认是"移动焦点"的，如果不用预览阶段拦下来，
+ * 按一下右方向键可能只是把焦点从一个按钮挪到另一个按钮，而不是翻页。
+ * 这里先把翻页键全部消费掉，焦点就不会跑掉，蓝牙翻页器按多少下就翻多少页。
+ *
+ * 只在"按下"（KeyDown）时真正翻页，"抬起"（KeyUp）照样消费掉但不做动作 ——
+ * 一个按键只翻一页。
+ */
+private fun handleReaderPageKey(
+    event: KeyEvent,
+    onNextPage: () -> Unit,
+    onPreviousPage: () -> Unit
+): Boolean {
+    val action = readerPageAction(event.nativeKeyEvent.keyCode)
+    if (action == ReaderPageAction.NONE) return false
+
+    if (event.type == KeyEventType.KeyDown) {
+        when (action) {
+            ReaderPageAction.NEXT -> onNextPage()
+            ReaderPageAction.PREVIOUS -> onPreviousPage()
+            ReaderPageAction.NONE -> Unit
+        }
+    }
+    return true
 }
 
 /**

@@ -227,6 +227,15 @@ class TunerAudioEngine(
         /** 每次分析前进半帧，即约 46 毫秒一个结果。 */
         private const val HOP_DIVISOR = 2
 
+        /**
+         * 每次分析前进的采样点数（半帧）。
+         *
+         * 实时采集按它推进；录音的离线音准分析也用同一个值（见
+         * [com.example.musicpractice.pitch.PitchTrackAnalyzer]），这样两种模式的时间分辨率、
+         * 跨帧平滑行为完全一致。
+         */
+        const val HOP_SIZE = FRAME_SIZE / HOP_DIVISOR
+
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val BYTES_PER_SAMPLE = 2

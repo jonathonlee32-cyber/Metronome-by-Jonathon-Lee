@@ -122,6 +122,20 @@ class ScoreReaderViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     /**
+     * 重命名一个项目（需求一：最近项目里长按 → 重命名）。
+     *
+     * 只改数据库里的项目名称，不动用户原来的 PDF / 图片文件，也不动导入时拷的本地副本
+     * 和阅读进度。
+     *
+     * @return 成功返回新的项目名；名字为空或项目不存在时返回 null。
+     */
+    fun renameProject(id: String, newName: String): String? {
+        val renamed = library.rename(id, newName) ?: return null
+        libraryRevision++
+        return renamed.name
+    }
+
+    /**
      * 删除一个乐谱项目（需求五：最近项目里长按删除）。
      *
      * 两件事：先把项目从数据库里删掉（它的图片记录由外键级联一起删），
