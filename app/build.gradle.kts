@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     // Kotlin 2.0 起，Compose 编译器通过这个独立插件启用。
     alias(libs.plugins.kotlin.compose)
+    // KSP：Room 的注解处理器挂在它上面（比老的 kapt 快得多）。
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -19,8 +21,8 @@ android {
         minSdk = 21
         targetSdk = 35
         // 版本号规则：每次改动功能 +1（v2.2 -> v2.2.1），versionName 与启动页显示的版本一致。
-        versionCode = 15
-        versionName = "3.5"
+        versionCode = 18
+        versionName = "4.2"
     }
 
     buildTypes {
@@ -63,6 +65,12 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+
+    // 乐谱项目的本地数据库：Room（Android 官方库，底层就是系统自带的 SQLite，
+    // 完全离线、不需要任何权限、不上传任何数据）。编译器在编译期由 KSP 生成代码。
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // 纯 JVM 单元测试：练习记录的日期切分、时长格式化和统计汇总都是纯逻辑，直接跑在电脑上。
     testImplementation(libs.junit)

@@ -22,9 +22,10 @@
 
           这里刻意不写 android:screenOrientation：主页面和"BPM 测速"页都要支持横屏
           （横屏有专门的布局），方向交给系统按设备姿态决定。
-          只有开屏页面要求"始终竖屏"，而它不是独立的 Activity，只是 MainActivity 里
-          先显示的一屏，所以那条竖屏锁定写在 MainActivity.onCreate 里，
-          启动页一结束就恢复 SCREEN_ORIENTATION_UNSPECIFIED。
+          只有开屏页面和"乐谱阅读器"（主页 + PDF 阅读页）要求"始终竖屏"，它们都不是
+          独立的 Activity，而是 MainActivity 里先显示的几屏，所以那些竖屏锁定都写在
+          MainActivity 里：启动页一结束就恢复 SCREEN_ORIENTATION_UNSPECIFIED，
+          进乐谱阅读器时锁回竖屏、返回节拍器时再还给系统。
         -->
         <activity
             android:name=".MainActivity"

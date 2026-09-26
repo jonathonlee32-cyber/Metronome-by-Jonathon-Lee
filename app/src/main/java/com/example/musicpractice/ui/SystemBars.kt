@@ -5,11 +5,14 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Android 6.0 以下不支持"深色状态栏图标"时用的底色。
@@ -72,4 +75,38 @@ internal fun Context.findActivity(): Activity? {
         current = current.baseContext
     }
     return null
+}
+
+/**
+ * 全屏阅读模式：把状态栏和导航栏一起收起来，整屏都留给乐谱。
+ *
+ * 只给 PDF 阅读页的"点一下进全屏"用。两条规矩：
+ * - 进全屏时把系统栏行为设成"从屏幕边缘上滑可以临时唤出"，用户不会因为看不到状态栏而慌了；
+ * - 无论是退出全屏还是直接离开这一页（onDispose），都把系统栏还原，
+ *   否则回到节拍器会留下一个"没有状态栏"的界面。
+ *
+ * @param enabled 是否处于全屏阅读模式。
+ */
+@Composable
+fun ApplyImmersiveMode(enabled: Boolean) {
+    val view = LocalView.current
+
+    DisposableEffect(enabled) {
+        val window = view.context.findActivity()?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+
+        if (controller != null) {
+            if (enabled) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
 }

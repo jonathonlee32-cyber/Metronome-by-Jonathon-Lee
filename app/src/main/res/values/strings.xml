@@ -10,5 +10,5 @@
       版本号和日期之间是两个空格。XML 里连续空格会被资源编译器压成一个，
       所以这里用 \u0020 转义保住第二个空格。
     -->
-    <string name="splash_version">v_3.5\u0020\u00202026.09.22</string>
+    <string name="splash_version">v_4.2\u0020\u00202026.09.26</string>
 </resources>

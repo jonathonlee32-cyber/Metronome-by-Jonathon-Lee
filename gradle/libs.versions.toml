@@ -2,9 +2,13 @@
 [versions]
 agp = "8.7.2"
 kotlin = "2.0.21"
+# KSP 的版本号必须和 Kotlin 严格配套（前半段就是 Kotlin 版本）。
+ksp = "2.0.21-1.0.28"
 coreKtx = "1.13.1"
 activityCompose = "1.9.3"
 composeBom = "2024.10.01"
+# Room：Android 官方的本地数据库（SQLite 之上的一层封装），用于保存乐谱项目。
+room = "2.6.1"
 junit = "4.13.2"
 json = "20231013"
 
@@ -16,6 +20,10 @@ androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
+# Room 的三块：运行时、给 Kotlin 协程用的扩展、编译期生成代码的注解处理器。
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 
@@ -23,3 +31,5 @@ json = { group = "org.json", name = "json", version.ref = "json" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# KSP（Kotlin Symbol Processing）：Room 靠它在编译期生成数据库代码。
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
