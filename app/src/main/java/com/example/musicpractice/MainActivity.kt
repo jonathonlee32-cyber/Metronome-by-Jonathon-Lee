@@ -176,20 +176,21 @@ class MainActivity : ComponentActivity() {
                 // 它会被恢复，启动页不会被强行重新显示一遍。
                 var showSplash by rememberSaveable { mutableStateOf(true) }
 
-                // 冷启动时要回到的那份乐谱（需求八 情况1）：上次打开过的项目，没有就是 null。
+                // 上次打开过的那份乐谱（需求八 情况2）：没有就是 null。
                 // remember 只算一次 —— 它读的是内存里的乐谱库，不涉及磁盘。
-                // 转屏 / 系统回收后的重建不算冷启动：那时 rememberSaveable 已经把页面恢复好了，
-                // 用户当时在节拍器就还是节拍器，不该被拽进乐谱阅读器。
+                //
+                // 它只用来记住"上次打开的是哪一份"，**不决定启动落在哪一页**（v5.2 修正）：
+                // 以前冷启动时这里会把入口页设成 Screen.SCORE_VIEWER，导致每次打开 App
+                // 都直接跳到上次那份乐谱上，所以现在启动入口固定为节拍器主页（见下面的 screen）。
                 val restoredProject = remember {
                     if (isFreshStart) scoreReaderViewModel.lastOpenedProject() else null
                 }
 
-                // 当前停在哪一页。默认是节拍器主页；冷启动要恢复乐谱时直接从这里起步。
-                var screen by rememberSaveable {
-                    mutableStateOf(
-                        if (restoredProject != null) Screen.SCORE_VIEWER else Screen.METRONOME
-                    )
-                }
+                // 当前停在哪一页。无论是不是冷启动，起点都是节拍器主页：
+                // 应用每次打开都从主页开始，不恢复上次停留的页面（v5.2）。
+                // 转屏 / 被系统回收后重建时，rememberSaveable 会把用户当时那一页恢复回来，
+                // 所以运行期间的页面切换（含返回主页）一切照旧。
+                var screen by rememberSaveable { mutableStateOf(Screen.METRONOME) }
 
                 // 阅读页 / 排序页正在看的是哪个项目（项目 id）。
                 // 它和 screen 一起被 rememberSaveable 保存，所以：

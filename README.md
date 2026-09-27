@@ -39,13 +39,29 @@
 
 ### Splash
 
-<img src="/screenshots/Screenshot_2026-09-21-15-00-57-456_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-27-15-50-14-542_com.example.m.jpg" width="250">
 
 ### Main
 
-<img src="/screenshots/Screenshot_2026-09-21-15-01-01-766_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-27-15-50-16-874_com.example.m.jpg" width="250">
 
-<img src="/screenshots/Screenshot_2026-09-21-15-01-04-736_com.example.m.jpg" width="250">
+<img src="/screenshots/Screenshot_2026-09-27-15-50-18-782_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-23-385_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-25-978_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-28-381_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-30-688_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-31-996_com.example.m.jpg" width="250">
+
+<img src="/screenshots/Screenshot_2026-09-27-15-50-36-572_com.example.m.jpg" width="250">
+
+## 🎬 Demo
+
+[![Watch the demo](./images/demo-cover.png)](https://youtu.be/AfaKcU-cFE0)
 
 ### Records
 
@@ -102,4 +118,4 @@ Xiamen University
 
 ## Version
 
-v_5.1
+v_5.2
