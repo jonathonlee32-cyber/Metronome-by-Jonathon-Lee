@@ -61,7 +61,7 @@
 
 ## 🎬 Demo
 
-[![Watch the demo](./images/demo-cover.png)](https://youtu.be/AfaKcU-cFE0)
+[![Watch the demo](./mq1.webp)](https://youtu.be/AfaKcU-cFE0)
 
 ### Records
 
