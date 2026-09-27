@@ -63,6 +63,8 @@
 
 [![Watch the demo](./mq1.webp)](https://youtu.be/AfaKcU-cFE0)
 
+##请点击图片跳转Demo链接
+
 ### Records
 
 主界面右上角"练习记录"进入，展示统计区域和按日期分组的练习明细。
